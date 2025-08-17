@@ -29,11 +29,12 @@ function App() {
   const [connected, setConnected] = useState(false)
   const [ws, setWs] = useState<WebSocket | null>(null)
   const keysPressed = useRef<Set<string>>(new Set())
+  const [keysPressedDisplay, setKeysPressedDisplay] = useState<string[]>([])
   const [sailAdjustment, setSailAdjustment] = useState(0)
 
   useEffect(() => {
     const connectWebSocket = () => {
-      const websocket = new WebSocket('wss://app-faernnul.fly.dev/ws')
+      const websocket = new WebSocket(import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws')
       
       websocket.onopen = () => {
         console.log('Connected to game server')
@@ -76,7 +77,10 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      console.log('Key down detected:', event.key)
+      event.preventDefault()
       keysPressed.current.add(event.key.toLowerCase())
+      setKeysPressedDisplay(Array.from(keysPressed.current))
       
       if (event.key.toLowerCase() === 'q') {
         setSailAdjustment(prev => {
@@ -94,15 +98,20 @@ function App() {
     }
 
     const handleKeyUp = (event: KeyboardEvent) => {
+      console.log('Key up detected:', event.key)
+      event.preventDefault()
       keysPressed.current.delete(event.key.toLowerCase())
+      setKeysPressedDisplay(Array.from(keysPressed.current))
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
+    console.log('Adding keyboard event listeners to document')
+    document.addEventListener('keydown', handleKeyDown, true)
+    document.addEventListener('keyup', handleKeyUp, true)
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
+      console.log('Removing keyboard event listeners from document')
+      document.removeEventListener('keydown', handleKeyDown, true)
+      document.removeEventListener('keyup', handleKeyUp, true)
     }
   }, [])
 
@@ -249,7 +258,7 @@ function App() {
         <div>Calculated Sail Angle: {Math.round(calculateSailAngle(gameState.windDirection, (playerData?.rotation[1] || 0) * 180 / Math.PI, true) * 180 / Math.PI)}°</div>
         <div>Wind Direction: {Math.round(gameState.windDirection)}°</div>
         <div>Wind Strength: {Math.round(gameState.windStrength * 10) / 10} knots</div>
-        <div>Keys Pressed: {Array.from(keysPressed.current).join(', ') || 'None'}</div>
+        <div>Keys Pressed: {keysPressedDisplay.join(', ') || 'None'}</div>
       </div>
 
       <div className="wind-indicator">

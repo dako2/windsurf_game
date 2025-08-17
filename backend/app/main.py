@@ -49,7 +49,6 @@ class GameManager:
         self.running = True
         
     async def connect(self, websocket: WebSocket, player_id: str):
-        await websocket.accept()
         self.connections[player_id] = websocket
         
     def disconnect(self, player_id: str):
