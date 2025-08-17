@@ -121,6 +121,24 @@ function App() {
             <meshStandardMaterial color="#006994" transparent opacity={0.8} />
           </mesh>
           
+          {/* Always show current player's windsurfer at origin if no players in game state */}
+          {gameState.players.length === 0 && (
+            <group position={[0, 0.5, 0]} rotation={[0, 0, 0]}>
+              <mesh>
+                <boxGeometry args={[2, 0.2, 0.5]} />
+                <meshStandardMaterial color="#ff6b6b" />
+              </mesh>
+              <mesh position={[0, 1, 0]}>
+                <planeGeometry args={[1, 2]} />
+                <meshStandardMaterial color="#ffffff" transparent opacity={0.8} />
+              </mesh>
+              <mesh position={[0, 2, 0]}>
+                <sphereGeometry args={[0.3]} />
+                <meshStandardMaterial color="#ffeb3b" />
+              </mesh>
+            </group>
+          )}
+          
           {gameState.players.map((player) => (
             <group key={player.id} position={player.position} rotation={player.rotation}>
               <mesh>
@@ -131,8 +149,26 @@ function App() {
                 <planeGeometry args={[1, 2]} />
                 <meshStandardMaterial color="#ffffff" transparent opacity={0.8} />
               </mesh>
+              <mesh position={[0, 2, 0]}>
+                <sphereGeometry args={[0.3]} />
+                <meshStandardMaterial color="#ffeb3b" />
+              </mesh>
             </group>
           ))}
+          
+          {/* Add some floating buoys for reference */}
+          <mesh position={[10, 1, 10]}>
+            <sphereGeometry args={[0.5]} />
+            <meshStandardMaterial color="#ff9800" />
+          </mesh>
+          <mesh position={[-15, 1, 8]}>
+            <sphereGeometry args={[0.5]} />
+            <meshStandardMaterial color="#ff9800" />
+          </mesh>
+          <mesh position={[5, 1, -12]}>
+            <sphereGeometry args={[0.5]} />
+            <meshStandardMaterial color="#ff9800" />
+          </mesh>
           
           <ambientLight intensity={0.5} />
           <directionalLight position={[10, 10, 5]} intensity={1} />
