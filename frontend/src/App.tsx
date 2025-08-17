@@ -130,8 +130,10 @@ function App() {
     const handleKeyUp = (event: KeyboardEvent) => {
       console.log('Key up detected:', event.key)
       event.preventDefault()
-      keysPressed.current.delete(event.key.toLowerCase())
-      setKeysPressedDisplay(Array.from(keysPressed.current))
+      setTimeout(() => {
+        keysPressed.current.delete(event.key.toLowerCase())
+        setKeysPressedDisplay(Array.from(keysPressed.current))
+      }, 100)
     }
 
     const handleMouseMove = (event: MouseEvent) => {
