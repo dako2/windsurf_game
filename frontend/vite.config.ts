@@ -7,6 +7,6 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
-    allowedHosts: ['weight-shift-simulator-tunnel-udo24ci1.devinapps.com', 'localhost', '127.0.0.1']
+    allowedHosts: ['weight-shift-simulator-tunnel-k48u98a8.devinapps.com', 'weight-shift-simulator-tunnel-trap41zf.devinapps.com', 'weight-shift-simulator-tunnel-udo24ci1.devinapps.com', 'localhost', '127.0.0.1']
   }
 })

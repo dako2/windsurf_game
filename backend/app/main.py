@@ -294,6 +294,7 @@ class GameManager:
                 "rotation": list(player.rotation),
                 "speed": player.speed,
                 "weightShift": player.weight_shift,
+                "sailAngle": player.sail_angle,
                 "foiling": player.foiling
             })
             
