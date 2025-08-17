@@ -8,6 +8,7 @@ interface Player {
   speed: number
   name: string
   weightShift?: number
+  sailAngle?: number
   foiling?: boolean
 }
 
@@ -190,7 +191,11 @@ function App() {
   // const playerData = gameState.players.find(p => p.id === playerId) // Unused in AI simulator mode
   const windArrow = `→`.repeat(Math.floor(gameState.windStrength / 5))
   
-  const calculateSailAngle = (windDirection: number, playerRotation: number = 0, isCurrentPlayer: boolean = false) => {
+  const calculateSailAngle = (windDirection: number, playerRotation: number = 0, isCurrentPlayer: boolean = false, playerSailAngle: number = 0) => {
+    if (Math.abs(playerSailAngle) > 0.1) {
+      return (playerSailAngle * Math.PI) / 180 // Convert degrees to radians
+    }
+    
     const windRad = (windDirection * Math.PI) / 180
     const playerRad = (playerRotation * Math.PI) / 180
     const relativeWind = windRad - playerRad
@@ -202,7 +207,7 @@ function App() {
     return finalAngle
   }
 
-  const drawWindsurfer = (ctx: CanvasRenderingContext2D, x: number, y: number, rotation: number, isCurrentPlayer: boolean, foiling: boolean) => {
+  const drawWindsurfer = (ctx: CanvasRenderingContext2D, x: number, y: number, rotation: number, isCurrentPlayer: boolean, foiling: boolean, playerSailAngle: number = 0) => {
     ctx.save()
     ctx.translate(x, y)
     ctx.rotate(rotation)
@@ -215,7 +220,7 @@ function App() {
     }
     ctx.fillRect(-15, -3, 30, 6)
     
-    const sailAngle = calculateSailAngle(gameState.windDirection, rotation * 180 / Math.PI, isCurrentPlayer)
+    const sailAngle = calculateSailAngle(gameState.windDirection, rotation * 180 / Math.PI, isCurrentPlayer, playerSailAngle)
     ctx.save()
     ctx.rotate(sailAngle)
     ctx.fillStyle = "#ffffff"
@@ -356,7 +361,7 @@ function App() {
           ctx.restore()
         }
         
-        drawWindsurfer(ctx, screenX, screenY, rotation, isCurrentPlayer, foiling)
+        drawWindsurfer(ctx, screenX, screenY, rotation, isCurrentPlayer, foiling, player.sailAngle || 0)
         
         if (player.speed > 0.1) {
           ctx.fillStyle = "#ffff00"
@@ -367,7 +372,7 @@ function App() {
       })
       
       if (gameState.players.length === 0) {
-        drawWindsurfer(ctx, centerX, centerY, 0, true, false)
+        drawWindsurfer(ctx, centerX, centerY, 0, true, false, 0)
       }
       
       if (aiPlayer && aiPlayer.speed > 0.1) {
@@ -427,6 +432,7 @@ function App() {
             <div>Speed: {Math.round(player.speed * 10) / 10} knots</div>
             <div>Rotation: {Math.round(player.rotation[1] * 180 / Math.PI)}°</div>
             <div>Weight Shift: {player.weightShift ? Math.round(player.weightShift * 100) / 100 : 0}</div>
+            <div>Sail Angle: {player.sailAngle ? Math.round(player.sailAngle) : 0}°</div>
             <div>Foiling: {player.foiling ? '🦅 YES' : '🌊 NO'}</div>
           </div>
         ))}
