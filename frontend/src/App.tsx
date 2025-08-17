@@ -31,6 +31,8 @@ function App() {
   const keysPressed = useRef<Set<string>>(new Set())
   const [keysPressedDisplay, setKeysPressedDisplay] = useState<string[]>([])
   const [sailAdjustment, setSailAdjustment] = useState(0)
+  const [mousePosition, setMousePosition] = useState({ x: 0.5, y: 0.5 })
+  const [mousePressed, setMousePressed] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -105,14 +107,56 @@ function App() {
       setKeysPressedDisplay(Array.from(keysPressed.current))
     }
 
-    console.log('Adding keyboard event listeners to document')
+    const handleMouseMove = (event: MouseEvent) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      
+      const rect = canvas.getBoundingClientRect()
+      const x = (event.clientX - rect.left) / rect.width
+      const y = (event.clientY - rect.top) / rect.height
+      
+      setMousePosition({ x, y })
+    }
+
+    const handleMouseDown = (event: MouseEvent) => {
+      event.preventDefault()
+      setMousePressed(true)
+    }
+
+    const handleMouseUp = (event: MouseEvent) => {
+      event.preventDefault()
+      setMousePressed(false)
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      setSailAdjustment(prev => {
+        const delta = event.deltaY > 0 ? 0.1 : -0.1
+        return Math.max(-2.0, Math.min(2.0, prev + delta))
+      })
+    }
+
     document.addEventListener('keydown', handleKeyDown, true)
     document.addEventListener('keyup', handleKeyUp, true)
+    
+    const canvas = canvasRef.current
+    if (canvas) {
+      canvas.addEventListener('mousemove', handleMouseMove)
+      canvas.addEventListener('mousedown', handleMouseDown)
+      canvas.addEventListener('mouseup', handleMouseUp)
+      canvas.addEventListener('wheel', handleWheel)
+    }
 
     return () => {
-      console.log('Removing keyboard event listeners from document')
       document.removeEventListener('keydown', handleKeyDown, true)
       document.removeEventListener('keyup', handleKeyUp, true)
+      
+      if (canvas) {
+        canvas.removeEventListener('mousemove', handleMouseMove)
+        canvas.removeEventListener('mousedown', handleMouseDown)
+        canvas.removeEventListener('mouseup', handleMouseUp)
+        canvas.removeEventListener('wheel', handleWheel)
+      }
     }
   }, [])
 
@@ -120,18 +164,28 @@ function App() {
     const gameLoop = setInterval(() => {
       if (ws && connected) {
         const keys = Array.from(keysPressed.current)
-        if (keys.length > 0) {
+        
+        const sailAngle = (mousePosition.x - 0.5) * 4.0 // -2 to +2 range
+        const sailPower = Math.max(0.1, 1.0 - mousePosition.y) // 0.1 to 1.0 range
+        
+        if (keys.length > 0 || mousePressed || Math.abs(sailAngle) > 0.1) {
           ws.send(JSON.stringify({
             type: 'input',
             playerId,
-            keys
+            keys,
+            mouse: {
+              sailAngle,
+              sailPower,
+              pressed: mousePressed,
+              position: mousePosition
+            }
           }))
         }
       }
     }, 50)
 
     return () => clearInterval(gameLoop)
-  }, [ws, connected, playerId])
+  }, [ws, connected, playerId, mousePosition, mousePressed])
 
   // const playerData = gameState.players.find(p => p.id === playerId) // Unused in AI simulator mode
   const windArrow = `→`.repeat(Math.floor(gameState.windStrength / 5))

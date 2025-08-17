@@ -131,7 +131,7 @@ class GameManager:
         self.game_state.players[player_id] = player
         await self.broadcast_game_state()
         
-    def update_player_input(self, player_id: str, keys: List[str]):
+    def update_player_input(self, player_id: str, keys: List[str], mouse_data: dict = None):
         if player_id not in self.game_state.players:
             return
             
@@ -162,10 +162,17 @@ class GameManager:
         if 'd' in keys:
             ry += turn_speed * dt
             
-        if 'q' in keys:
-            player.sail_angle = max(-45, player.sail_angle - 30 * dt)
-        if 'e' in keys:
-            player.sail_angle = min(45, player.sail_angle + 30 * dt)
+        if mouse_data:
+            player.sail_angle = mouse_data.get('sailAngle', 0) * 45
+            sail_power_multiplier = mouse_data.get('sailPower', 1.0)
+            mouse_pressed = mouse_data.get('pressed', False)
+        else:
+            sail_power_multiplier = 1.0
+            mouse_pressed = False
+            if 'q' in keys:
+                player.sail_angle = max(-45, player.sail_angle - 30 * dt)
+            if 'e' in keys:
+                player.sail_angle = min(45, player.sail_angle + 30 * dt)
         
         sail_force = compute_sail_force(self.game_state.wind_strength, self.game_state.wind_direction, player.sail_angle)
         drag_force = compute_water_drag(player.board_velocity)
@@ -175,6 +182,10 @@ class GameManager:
         
         total_force = (sail_force[0] + drag_force[0] + current_force[0], 
                       sail_force[1] + drag_force[1] + current_force[1])
+        
+        total_force = (total_force[0] * sail_power_multiplier, total_force[1] * sail_power_multiplier)
+        if mouse_pressed:
+            total_force = (total_force[0] * 1.2, total_force[1] * 1.2)
         
         if not player.foiling:
             weight_factor = 1.0 + (player.weight_shift * -0.3)
@@ -428,9 +439,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 
             elif message["type"] == "input" and player_id:
                 keys = message["keys"]
+                mouse_data = message.get("mouse", None)
                 if player_id != "ai_simulator":  # Don't log AI input to reduce spam
-                    print(f"DEBUG: Received input message - player_id={player_id}, keys={keys}")
-                game_manager.update_player_input(player_id, keys)
+                    print(f"DEBUG: Received input message - player_id={player_id}, keys={keys}, mouse={mouse_data}")
+                game_manager.update_player_input(player_id, keys, mouse_data)
                 
     except WebSocketDisconnect:
         if player_id:
