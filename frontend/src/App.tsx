@@ -134,7 +134,7 @@ function App() {
     return () => clearInterval(gameLoop)
   }, [ws, connected, playerId])
 
-  const playerData = gameState.players.find(p => p.id === playerId)
+  // const playerData = gameState.players.find(p => p.id === playerId) // Unused in AI simulator mode
   const windArrow = `→`.repeat(Math.floor(gameState.windStrength / 5))
   
   const calculateSailAngle = (windDirection: number, playerRotation: number = 0, isCurrentPlayer: boolean = false) => {
@@ -246,23 +246,29 @@ function App() {
       </Canvas>
 
       <div className="game-ui">
-        <h2>3D Windsurfing Game</h2>
-        <div>Speed: {playerData ? Math.round(playerData.speed) : 0} knots</div>
-        <div>Players Online: {gameState.players.length}</div>
+        <h2>🤖 Automated Windsurf Simulator</h2>
+        <div>AI Players: {gameState.players.filter(p => p.name.includes('AI')).length}</div>
+        <div>Human Players: {gameState.players.filter(p => !p.name.includes('AI')).length}</div>
+        <div>Total Players: {gameState.players.length}</div>
       </div>
 
       <div className="real-time-matrix">
-        <div><strong>🏄‍♂️ SURFER DATA MATRIX</strong></div>
-        <div>Position: ({playerData ? `${Math.round(playerData.position[0])}, ${Math.round(playerData.position[2])}` : '0, 0'})</div>
-        <div>Speed: {playerData ? Math.round(playerData.speed * 10) / 10 : 0} knots</div>
-        <div>Rotation: {playerData ? Math.round(playerData.rotation[1] * 180 / Math.PI) : 0}°</div>
-        <div>Sail Adjustment: {Math.round(sailAdjustment * 100) / 100}</div>
-        <div>Calculated Sail Angle: {Math.round(calculateSailAngle(gameState.windDirection, (playerData?.rotation[1] || 0) * 180 / Math.PI, true) * 180 / Math.PI)}°</div>
-        <div>Wind Direction: {Math.round(gameState.windDirection)}°</div>
-        <div>Wind Strength: {Math.round(gameState.windStrength * 10) / 10} knots</div>
-        <div>Weight Shift: {playerData?.weightShift ? Math.round(playerData.weightShift * 100) / 100 : 0}</div>
-        <div>Foiling: {playerData?.foiling ? '🦅 YES' : '🌊 NO'}</div>
-        <div>Keys Pressed: {keysPressedDisplay.join(', ') || 'None'}</div>
+        <div><strong>🤖 AI SIMULATOR DATA</strong></div>
+        {gameState.players.map(player => (
+          <div key={player.id} style={{ marginBottom: '10px', padding: '5px', border: player.name.includes('AI') ? '2px solid #00ff00' : '1px solid #ccc' }}>
+            <div><strong>{player.name}</strong></div>
+            <div>Position: ({Math.round(player.position[0])}, {Math.round(player.position[2])})</div>
+            <div>Speed: {Math.round(player.speed * 10) / 10} knots</div>
+            <div>Rotation: {Math.round(player.rotation[1] * 180 / Math.PI)}°</div>
+            <div>Weight Shift: {player.weightShift ? Math.round(player.weightShift * 100) / 100 : 0}</div>
+            <div>Foiling: {player.foiling ? '🦅 YES' : '🌊 NO'}</div>
+          </div>
+        ))}
+        <div style={{ marginTop: '10px', borderTop: '1px solid #ccc', paddingTop: '5px' }}>
+          <div>Wind Direction: {Math.round(gameState.windDirection)}°</div>
+          <div>Wind Strength: {Math.round(gameState.windStrength * 10) / 10} knots</div>
+          <div>Manual Keys: {keysPressedDisplay.join(', ') || 'None'}</div>
+        </div>
       </div>
 
       <div className="wind-indicator">
@@ -274,17 +280,21 @@ function App() {
       </div>
 
       <div className="controls">
-        <div><strong>Controls:</strong></div>
-        <div>W/S - Forward/Backward</div>
-        <div>A/D - Turn Left/Right</div>
-        <div>Q/E - Adjust Sail</div>
-        <div>R/F - Weight Forward/Back</div>
+        <div><strong>🤖 Automated Simulator:</strong></div>
+        <div>✅ AI demonstrates weight shift physics</div>
+        <div>✅ AI shows foiling activation at speed</div>
+        <div>✅ AI exhibits crash recovery</div>
+        <div>✅ Dynamic wind conditions</div>
+        <div style={{ marginTop: '10px', fontSize: '12px', color: '#888' }}>
+          Manual controls still available: W/S/A/D/Q/E/R/F
+        </div>
       </div>
 
       <div className="multiplayer-info">
         <div>Status: {connected ? '🟢 Connected' : '🔴 Connecting...'}</div>
+        <div>Simulation: {connected ? '🤖 AI Running' : '⏸️ Paused'}</div>
         <div>Player ID: {playerId.slice(0, 8)}</div>
-        <div className="game-info">3D graphics enabled with Three.js integration</div>
+        <div className="game-info">Automated physics demonstration active</div>
       </div>
     </div>
   )

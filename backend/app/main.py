@@ -68,6 +68,9 @@ class GameManager:
             timestamp=time.time()
         )
         self.running = True
+        self.ai_player_id = None
+        self.simulation_time = 0.0
+        self.simulation_phase = "accelerating"
         
     async def connect(self, websocket: WebSocket, player_id: str):
         self.connections[player_id] = websocket
@@ -156,6 +159,8 @@ class GameManager:
         if 'w' in keys:
             wind_factor = self.calculate_wind_effect(player.sail_angle, self.game_state.wind_direction, ry)
             acc = (total_force[0] / mass * wind_factor, total_force[1] / mass * wind_factor)
+            if player.id == "ai_simulator":
+                print(f"AI: wind_factor={wind_factor:.2f}, speed={vector_magnitude(player.board_velocity):.2f}, foiling={player.foiling}, weight_shift={player.weight_shift:.2f}")
             player.board_velocity = (
                 player.board_velocity[0] + acc[0] * dt,
                 player.board_velocity[1] + acc[1] * dt
@@ -173,9 +178,8 @@ class GameManager:
         
         player.speed = min(max_speed, vector_magnitude(player.board_velocity))
         
-        if player.speed > 0:
-            x += math.sin(ry) * player.speed * dt
-            z += math.cos(ry) * player.speed * dt
+        x += player.board_velocity[0] * dt
+        z += player.board_velocity[1] * dt
             
         if player.foiling:
             wave_height = math.sin(current_time * 0.5 + x * 0.1) * 0.2 + 0.5
@@ -241,8 +245,96 @@ class GameManager:
         for player_id in disconnected:
             self.disconnect(player_id)
             
+    def create_ai_player(self):
+        """Create an AI-controlled player for simulation"""
+        if self.ai_player_id is None:
+            self.ai_player_id = "ai_simulator"
+            ai_player = Player(
+                id=self.ai_player_id,
+                name="🤖 AI Windsurfer",
+                position=(0.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                speed=0.0,
+                sail_angle=0.0,
+                weight_shift=0.0,
+                board_velocity=(0.0, 0.0),
+                foiling=False,
+                last_update=time.time()
+            )
+            self.game_state.players[self.ai_player_id] = ai_player
+            print(f"AI Player created: {self.ai_player_id}")
+
+    def simulate_ai_input(self) -> List[str]:
+        """Generate AI input based on simulation phase and conditions"""
+        if self.ai_player_id not in self.game_state.players:
+            return []
+            
+        player = self.game_state.players[self.ai_player_id]
+        keys = []
+        
+        self.simulation_time += 0.033  # 30 FPS intervals
+        
+        if self.simulation_phase == "accelerating":
+            keys.append('w')  # Always accelerating
+            keys.append('r')  # Weight forward for better acceleration
+            
+            if self.simulation_time % 2 < 1:
+                keys.append('q')  # Adjust sail left
+            else:
+                keys.append('e')  # Adjust sail right
+                
+            if player.speed > 4.0:
+                self.simulation_phase = "foiling"
+                print(f"AI entering foiling phase at speed {player.speed}")
+                
+        elif self.simulation_phase == "foiling":
+            keys.append('w')  # Continue forward
+            
+            if abs(player.weight_shift) > 0.3:
+                if player.weight_shift > 0:
+                    keys.append('r')  # Weight forward to center
+                else:
+                    keys.append('f')  # Weight back to center
+            
+            turn_cycle = (self.simulation_time % 10) / 10
+            if turn_cycle < 0.3:
+                keys.append('a')  # Turn left
+            elif turn_cycle > 0.7:
+                keys.append('d')  # Turn right
+                
+            if self.simulation_time > 15 and self.simulation_time < 17:
+                keys.append('f')  # Intentional weight back to demonstrate crash
+                
+        elif self.simulation_phase == "turning":
+            keys.append('w')  # Maintain speed
+            
+            if self.simulation_time % 8 < 4:
+                keys.append('d')  # Turn right
+            else:
+                keys.append('a')  # Turn left
+                
+        if self.simulation_time > 30:
+            self.simulation_time = 0
+            self.simulation_phase = "accelerating"
+            player.position = (0.0, 0.0, 0.0)
+            player.rotation = (0.0, 0.0, 0.0)
+            player.speed = 0.0
+            player.board_velocity = (0.0, 0.0)
+            player.weight_shift = 0.0
+            player.foiling = False
+            print("AI simulation reset - starting new cycle")
+            
+        return keys
+
     async def game_loop(self):
+        self.create_ai_player()
+        
         while self.running:
+            if self.ai_player_id:
+                ai_keys = self.simulate_ai_input()
+                if ai_keys:
+                    self.update_player_input(self.ai_player_id, ai_keys)
+            
             await self.update_wind()
             await self.broadcast_game_state()
             await asyncio.sleep(1/30)  # 30 FPS
@@ -275,6 +367,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 
             elif message["type"] == "input" and player_id:
                 keys = message["keys"]
+                if player_id != "ai_simulator":  # Don't log AI input to reduce spam
+                    print(f"DEBUG: Received input message - player_id={player_id}, keys={keys}")
                 game_manager.update_player_input(player_id, keys)
                 
     except WebSocketDisconnect:
