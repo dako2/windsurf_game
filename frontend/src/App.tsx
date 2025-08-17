@@ -29,6 +29,7 @@ function App() {
   const [connected, setConnected] = useState(false)
   const [ws, setWs] = useState<WebSocket | null>(null)
   const keysPressed = useRef<Set<string>>(new Set())
+  const [sailAdjustment, setSailAdjustment] = useState(0)
 
   useEffect(() => {
     const connectWebSocket = () => {
@@ -76,6 +77,20 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       keysPressed.current.add(event.key.toLowerCase())
+      
+      if (event.key.toLowerCase() === 'q') {
+        setSailAdjustment(prev => {
+          const newValue = Math.max(prev - 0.3, -2.0)
+          console.log('Q pressed - Sail adjustment:', newValue)
+          return newValue
+        })
+      } else if (event.key.toLowerCase() === 'e') {
+        setSailAdjustment(prev => {
+          const newValue = Math.min(prev + 0.3, 2.0)
+          console.log('E pressed - Sail adjustment:', newValue)
+          return newValue
+        })
+      }
     }
 
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -110,6 +125,22 @@ function App() {
 
   const playerData = gameState.players.find(p => p.id === playerId)
   const windArrow = `→`.repeat(Math.floor(gameState.windStrength / 5))
+  
+  const calculateSailAngle = (windDirection: number, playerRotation: number = 0, isCurrentPlayer: boolean = false) => {
+    const windRad = (windDirection * Math.PI) / 180
+    const playerRad = (playerRotation * Math.PI) / 180
+    const relativeWind = windRad - playerRad
+    const baseAngle = Math.sin(relativeWind) * 0.8
+    
+    const adjustment = isCurrentPlayer ? sailAdjustment : 0
+    const finalAngle = baseAngle + adjustment
+    
+    if (isCurrentPlayer && adjustment !== 0) {
+      console.log('Sail angle calculation:', { windDirection, baseAngle, adjustment, finalAngle })
+    }
+    
+    return finalAngle
+  }
 
   return (
     <div className="game-container">
@@ -124,14 +155,25 @@ function App() {
           {/* Always show current player's windsurfer at origin if no players in game state */}
           {gameState.players.length === 0 && (
             <group position={[0, 0.5, 0]} rotation={[0, 0, 0]}>
+              {/* Windsurfer board */}
               <mesh>
                 <boxGeometry args={[2, 0.2, 0.5]} />
                 <meshStandardMaterial color="#ff6b6b" />
               </mesh>
-              <mesh position={[0, 1, 0]}>
+              {/* Dynamic sail that rotates with wind and manual adjustment */}
+              <mesh 
+                position={[0, 1, 0]} 
+                rotation={[0, calculateSailAngle(gameState.windDirection, 0, true), 0]}
+              >
                 <planeGeometry args={[1, 2]} />
                 <meshStandardMaterial color="#ffffff" transparent opacity={0.8} />
               </mesh>
+              {/* Mast */}
+              <mesh position={[0, 1, 0]}>
+                <cylinderGeometry args={[0.05, 0.05, 2]} />
+                <meshStandardMaterial color="#8B4513" />
+              </mesh>
+              {/* Player head */}
               <mesh position={[0, 2, 0]}>
                 <sphereGeometry args={[0.3]} />
                 <meshStandardMaterial color="#ffeb3b" />
@@ -141,14 +183,25 @@ function App() {
           
           {gameState.players.map((player) => (
             <group key={player.id} position={player.position} rotation={player.rotation}>
+              {/* Windsurfer board */}
               <mesh>
                 <boxGeometry args={[2, 0.2, 0.5]} />
                 <meshStandardMaterial color={player.id === playerId ? "#ff6b6b" : "#4ecdc4"} />
               </mesh>
-              <mesh position={[0, 1, 0]}>
+              {/* Dynamic sail that rotates with wind and player rotation */}
+              <mesh 
+                position={[0, 1, 0]} 
+                rotation={[0, calculateSailAngle(gameState.windDirection, player.rotation[1] * 180 / Math.PI, player.id === playerId), 0]}
+              >
                 <planeGeometry args={[1, 2]} />
                 <meshStandardMaterial color="#ffffff" transparent opacity={0.8} />
               </mesh>
+              {/* Mast */}
+              <mesh position={[0, 1, 0]}>
+                <cylinderGeometry args={[0.05, 0.05, 2]} />
+                <meshStandardMaterial color="#8B4513" />
+              </mesh>
+              {/* Player head */}
               <mesh position={[0, 2, 0]}>
                 <sphereGeometry args={[0.3]} />
                 <meshStandardMaterial color="#ffeb3b" />
