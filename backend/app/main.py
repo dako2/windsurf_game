@@ -7,6 +7,13 @@ import time
 from typing import Dict, List, Tuple
 from dataclasses import dataclass, asdict
 
+def wrap_deg(a: float) -> float:
+    return (a + 360.0) % 360.0
+
+def heading_to_unit(heading_deg: float) -> Tuple[float, float]:
+    r = math.radians(heading_deg)
+    return (math.cos(r), math.sin(r))
+
 app = FastAPI()
 
 # Disable CORS. Do not remove this for full-stack development.
@@ -39,15 +46,29 @@ class GameState:
     waves: float
     timestamp: float
 
-def compute_sail_force(wind_speed: float, wind_dir: float, sail_angle: float) -> Tuple[float, float]:
-    relative_angle = wind_dir - sail_angle
-    fx = wind_speed * math.cos(math.radians(relative_angle))
-    fy = wind_speed * math.sin(math.radians(relative_angle))
+def compute_sail_force_with_heading(wind_speed: float, wind_dir_deg: float, boat_heading_deg: float, sail_angle_deg: float) -> Tuple[float, float]:
+    rel_wind_deg = wrap_deg(wind_dir_deg - boat_heading_deg)
+    alpha = wrap_deg(rel_wind_deg - sail_angle_deg)  # angle of attack proxy
+
+    c = 0.015  # tuned constant
+    drive = c * (wind_speed ** 2) * max(0.0, math.sin(math.radians(2 * min(alpha, 180 - alpha))))
+
+    side = 0.6 * c * (wind_speed ** 2) * math.sin(math.radians(alpha))
+
+    fx_b, fy_b = drive, side
+    hx, hy = heading_to_unit(boat_heading_deg)
+    fx = fx_b * hx - fy_b * hy
+    fy = fx_b * hy + fy_b * hx
     return (fx, fy)
 
 def compute_water_drag(velocity: Tuple[float, float]) -> Tuple[float, float]:
-    drag_coeff = 0.8
-    return (-drag_coeff * velocity[0], -drag_coeff * velocity[1])
+    vx, vy = velocity
+    speed = math.hypot(vx, vy)
+    if speed == 0:
+        return (0.0, 0.0)
+    CdA = 0.2  # tuned
+    mag = CdA * (speed ** 2)
+    return (-mag * vx / speed, -mag * vy / speed)
 
 def compute_foil_lift(velocity: Tuple[float, float]) -> float:
     speed = math.sqrt(velocity[0]**2 + velocity[1]**2)
@@ -56,6 +77,18 @@ def compute_foil_lift(velocity: Tuple[float, float]) -> float:
 
 def vector_magnitude(velocity: Tuple[float, float]) -> float:
     return math.sqrt(velocity[0]**2 + velocity[1]**2)
+
+def damp(v: Tuple[float, float], rate: float, dt: float) -> Tuple[float, float]:
+    k = max(0.0, min(1.0, 1.0 - rate * dt))
+    return (v[0] * k, v[1] * k)
+
+def clamp_speed(v: Tuple[float, float], vmax: float) -> Tuple[float, float]:
+    vx, vy = v
+    s = math.hypot(vx, vy)
+    if s <= vmax or s == 0:
+        return v
+    f = vmax / s
+    return (vx * f, vy * f)
 
 def compute_wave_current(position: Tuple[float, float, float], time: float, wave_strength: float) -> Tuple[float, float]:
     """Compute water current effects from wave motion"""
@@ -161,6 +194,7 @@ class GameManager:
             ry -= turn_speed * dt
         if 'd' in keys:
             ry += turn_speed * dt
+        ry = wrap_deg(ry)
             
         if mouse_data:
             player.sail_angle = mouse_data.get('sailAngle', 0) * 45
@@ -174,7 +208,12 @@ class GameManager:
             if 'e' in keys:
                 player.sail_angle = min(45, player.sail_angle + 30 * dt)
         
-        sail_force = compute_sail_force(self.game_state.wind_strength, self.game_state.wind_direction, player.sail_angle)
+        sail_force = compute_sail_force_with_heading(
+            self.game_state.wind_strength,
+            self.game_state.wind_direction,
+            ry,  # boat heading in degrees
+            player.sail_angle
+        )
         drag_force = compute_water_drag(player.board_velocity)
         
         wave_current = compute_wave_current(player.position, current_time, self.game_state.waves)
@@ -213,7 +252,7 @@ class GameManager:
         if player.foiling:
             if abs(player.weight_shift) > 0.7:
                 player.foiling = False
-                player.board_velocity = (player.board_velocity[0] * 0.6, player.board_velocity[1] * 0.6)
+                player.board_velocity = (player.board_velocity[0] * 0.75, player.board_velocity[1] * 0.75)
         
         if 'w' in keys:
             wind_factor = self.calculate_wind_effect(player.sail_angle, self.game_state.wind_direction, ry)
@@ -226,17 +265,12 @@ class GameManager:
                 player.board_velocity[1] + acc[1] * dt
             )
         elif 's' in keys:
-            player.board_velocity = (
-                player.board_velocity[0] * (1 - 2 * dt),
-                player.board_velocity[1] * (1 - 2 * dt)
-            )
+            player.board_velocity = damp(player.board_velocity, rate=2.0, dt=dt)
         else:
-            player.board_velocity = (
-                player.board_velocity[0] * (1 - 0.5 * dt),
-                player.board_velocity[1] * (1 - 0.5 * dt)
-            )
+            player.board_velocity = damp(player.board_velocity, rate=0.5, dt=dt)
         
-        player.speed = min(max_speed, vector_magnitude(player.board_velocity))
+        player.board_velocity = clamp_speed(player.board_velocity, max_speed)
+        player.speed = math.hypot(*player.board_velocity)
         
         effective_velocity = (
             player.board_velocity[0] + wave_current[0] * 0.1,  # Small direct current push
@@ -253,22 +287,18 @@ class GameManager:
         player.last_update = current_time
         
     def calculate_wind_effect(self, sail_angle: float, wind_direction: float, boat_heading: float) -> float:
-        relative_wind = wind_direction - boat_heading
+        relative_wind = wrap_deg(wind_direction - boat_heading)
         optimal_sail_angle = relative_wind * 0.5
-        
-        angle_diff = abs(sail_angle - optimal_sail_angle)
+        angle_diff = abs(wrap_deg(sail_angle - optimal_sail_angle))
         efficiency = max(0.1, 1.0 - (angle_diff / 45.0))
-        
-        wind_factor = self.game_state.wind_strength / 20.0
-        
-        return efficiency * wind_factor
+        return efficiency
         
     async def update_wind(self):
         current_time = time.time()
         
         base_wind_shift = math.sin(current_time * 0.1) * 0.8
         gust_factor = math.sin(current_time * 0.15) * 0.3
-        self.game_state.wind_direction += base_wind_shift + gust_factor
+        self.game_state.wind_direction = wrap_deg(self.game_state.wind_direction + base_wind_shift + gust_factor)
         
         base_strength = 15 + math.sin(current_time * 0.05) * 5
         gust_strength = math.sin(current_time * 0.2) * 3
@@ -401,14 +431,38 @@ class GameManager:
 
     async def game_loop(self):
         # self.create_ai_player()
+        last = time.time()
         
         while self.running:
+            now = time.time()
+            dt = max(1/120, min(1/20, now - last))  # clamp dt
+            last = now
+            
             # if self.ai_player_id:
             #     ai_keys = self.simulate_ai_input()
             #     if ai_keys:
             #         self.update_player_input(self.ai_player_id, ai_keys)
             
             await self.update_wind()
+
+            for p in list(self.game_state.players.values()):
+                # Apply passive drag and small wave current push
+                wave_current = compute_wave_current(p.position, now, self.game_state.waves)
+                drag = compute_water_drag(p.board_velocity)
+                mass = 80.0
+
+                ax = (drag[0] + 0.1 * wave_current[0]) / mass
+                ay = (drag[1] + 0.1 * wave_current[1]) / mass
+                p.board_velocity = (p.board_velocity[0] + ax * dt, p.board_velocity[1] + ay * dt)
+                p.board_velocity = clamp_speed(p.board_velocity, 25.0)
+
+                x, y, z = p.position
+                x += p.board_velocity[0] * dt + 0.1 * wave_current[0] * dt
+                z += p.board_velocity[1] * dt + 0.1 * wave_current[1] * dt
+                y = compute_enhanced_wave_height((x, y, z), now, self.game_state.waves, p.foiling)
+                p.position = (x, y, z)
+                p.last_update = now
+
             await self.broadcast_game_state()
             await asyncio.sleep(1/30)  # 30 FPS
 
