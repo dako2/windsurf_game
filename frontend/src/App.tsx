@@ -237,29 +237,105 @@ function App() {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    let cameraX = 0
+    let cameraY = 0
+    const speedTrails: Array<{x: number, y: number, alpha: number}> = []
+
     const animate = () => {
       ctx.fillStyle = "#006994"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       
-      drawWaves(ctx, Date.now())
+      const aiPlayer = gameState.players.find(p => p.name.includes('AI'))
+      if (aiPlayer && aiPlayer.speed > 0.1) {
+        const targetCameraX = -aiPlayer.position[0] * 15
+        const targetCameraY = -aiPlayer.position[2] * 15
+        cameraX += (targetCameraX - cameraX) * 0.05
+        cameraY += (targetCameraY - cameraY) * 0.05
+        
+        if (aiPlayer.speed > 1) {
+          speedTrails.push({
+            x: canvas.width / 2 + aiPlayer.position[0] * 15 + cameraX,
+            y: canvas.height / 2 + aiPlayer.position[2] * 15 + cameraY,
+            alpha: Math.min(aiPlayer.speed / 10, 1)
+          })
+        }
+      }
       
-      const centerX = canvas.width / 2
-      const centerY = canvas.height / 2
+      for (let i = speedTrails.length - 1; i >= 0; i--) {
+        const trail = speedTrails[i]
+        trail.alpha -= 0.02
+        if (trail.alpha <= 0) {
+          speedTrails.splice(i, 1)
+          continue
+        }
+        
+        ctx.fillStyle = `rgba(255, 255, 255, ${trail.alpha * 0.3})`
+        ctx.beginPath()
+        ctx.arc(trail.x, trail.y, 3, 0, 2 * Math.PI)
+        ctx.fill()
+      }
+      
+      drawWaves(ctx, Date.now() + cameraX * 0.1)
+      
+      const centerX = canvas.width / 2 + cameraX
+      const centerY = canvas.height / 2 + cameraY
       
       drawBuoys(ctx, centerX, centerY)
       
       gameState.players.forEach(player => {
-        const screenX = centerX + player.position[0] * 10
-        const screenY = centerY + player.position[2] * 10
+        const screenX = centerX + player.position[0] * 15
+        const screenY = centerY + player.position[2] * 15
         const rotation = player.rotation[1]
         const isCurrentPlayer = player.id === playerId
         const foiling = player.foiling || false
         
+        if (player.speed > 0.5) {
+          ctx.save()
+          ctx.translate(screenX, screenY)
+          ctx.rotate(rotation + Math.PI)
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(player.speed / 5, 0.4)})`
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath()
+            ctx.ellipse(15 + i * 8, 0, 8 - i * 2, 3 - i, 0, 0, 2 * Math.PI)
+            ctx.fill()
+          }
+          ctx.restore()
+        }
+        
         drawWindsurfer(ctx, screenX, screenY, rotation, isCurrentPlayer, foiling)
+        
+        if (player.speed > 0.1) {
+          ctx.fillStyle = "#ffff00"
+          ctx.font = "12px Arial"
+          ctx.textAlign = "center"
+          ctx.fillText(`${Math.round(player.speed * 10) / 10} kts`, screenX, screenY - 35)
+        }
       })
       
       if (gameState.players.length === 0) {
         drawWindsurfer(ctx, centerX, centerY, 0, true, false)
+      }
+      
+      if (aiPlayer && aiPlayer.speed > 0.1) {
+        ctx.save()
+        ctx.translate(canvas.width - 60, 60)
+        ctx.strokeStyle = "#ffffff"
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.arc(0, 0, 25, 0, 2 * Math.PI)
+        ctx.stroke()
+        
+        ctx.fillStyle = "#ff6b6b"
+        ctx.save()
+        ctx.rotate(aiPlayer.rotation[1])
+        ctx.beginPath()
+        ctx.moveTo(0, -20)
+        ctx.lineTo(-5, -10)
+        ctx.lineTo(5, -10)
+        ctx.closePath()
+        ctx.fill()
+        ctx.restore()
+        ctx.restore()
       }
       
       requestAnimationFrame(animate)
