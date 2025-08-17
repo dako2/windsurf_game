@@ -432,7 +432,7 @@ function App() {
             <div>Speed: {Math.round(player.speed * 10) / 10} knots</div>
             <div>Rotation: {Math.round(player.rotation[1] * 180 / Math.PI)}°</div>
             <div>Weight Shift: {player.weightShift ? Math.round(player.weightShift * 100) / 100 : 0}</div>
-            <div>Sail Angle: {player.sailAngle ? Math.round(player.sailAngle) : 0}°</div>
+            <div>Sail Angle: {player.sailAngle !== undefined ? Math.round(player.sailAngle) : 0}°</div>
             <div>Foiling: {player.foiling ? '🦅 YES' : '🌊 NO'}</div>
           </div>
         ))}
