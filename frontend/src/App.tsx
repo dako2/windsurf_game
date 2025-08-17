@@ -130,14 +130,19 @@ function App() {
     const windRad = (windDirection * Math.PI) / 180
     const playerRad = (playerRotation * Math.PI) / 180
     const relativeWind = windRad - playerRad
-    const baseAngle = Math.sin(relativeWind) * 0.8
+    const baseAngle = Math.sin(relativeWind) * 2.0
     
-    const adjustment = isCurrentPlayer ? sailAdjustment : 0
+    const adjustment = isCurrentPlayer ? sailAdjustment * 2.0 : 0
     const finalAngle = baseAngle + adjustment
     
-    if (isCurrentPlayer && adjustment !== 0) {
-      console.log('Sail angle calculation:', { windDirection, baseAngle, adjustment, finalAngle })
-    }
+    console.log('Sail angle calculation:', { 
+      windDirection, 
+      playerRotation: playerRotation * 180 / Math.PI, 
+      baseAngle: baseAngle * 180 / Math.PI, 
+      adjustment: adjustment * 180 / Math.PI, 
+      finalAngle: finalAngle * 180 / Math.PI,
+      sailAdjustment 
+    })
     
     return finalAngle
   }
@@ -165,8 +170,8 @@ function App() {
                 position={[0, 1, 0]} 
                 rotation={[0, calculateSailAngle(gameState.windDirection, 0, true), 0]}
               >
-                <planeGeometry args={[1, 2]} />
-                <meshStandardMaterial color="#ffffff" transparent opacity={0.8} />
+                <planeGeometry args={[1.5, 2.5]} />
+                <meshStandardMaterial color="#ffffff" transparent opacity={0.9} side={2} />
               </mesh>
               {/* Mast */}
               <mesh position={[0, 1, 0]}>
@@ -193,8 +198,8 @@ function App() {
                 position={[0, 1, 0]} 
                 rotation={[0, calculateSailAngle(gameState.windDirection, player.rotation[1] * 180 / Math.PI, player.id === playerId), 0]}
               >
-                <planeGeometry args={[1, 2]} />
-                <meshStandardMaterial color="#ffffff" transparent opacity={0.8} />
+                <planeGeometry args={[1.5, 2.5]} />
+                <meshStandardMaterial color="#ffffff" transparent opacity={0.9} side={2} />
               </mesh>
               {/* Mast */}
               <mesh position={[0, 1, 0]}>
@@ -233,6 +238,18 @@ function App() {
         <h2>3D Windsurfing Game</h2>
         <div>Speed: {playerData ? Math.round(playerData.speed) : 0} knots</div>
         <div>Players Online: {gameState.players.length}</div>
+      </div>
+
+      <div className="real-time-matrix">
+        <div><strong>🏄‍♂️ SURFER DATA MATRIX</strong></div>
+        <div>Position: ({playerData ? `${Math.round(playerData.position[0])}, ${Math.round(playerData.position[2])}` : '0, 0'})</div>
+        <div>Speed: {playerData ? Math.round(playerData.speed * 10) / 10 : 0} knots</div>
+        <div>Rotation: {playerData ? Math.round(playerData.rotation[1] * 180 / Math.PI) : 0}°</div>
+        <div>Sail Adjustment: {Math.round(sailAdjustment * 100) / 100}</div>
+        <div>Calculated Sail Angle: {Math.round(calculateSailAngle(gameState.windDirection, (playerData?.rotation[1] || 0) * 180 / Math.PI, true) * 180 / Math.PI)}°</div>
+        <div>Wind Direction: {Math.round(gameState.windDirection)}°</div>
+        <div>Wind Strength: {Math.round(gameState.windStrength * 10) / 10} knots</div>
+        <div>Keys Pressed: {Array.from(keysPressed.current).join(', ') || 'None'}</div>
       </div>
 
       <div className="wind-indicator">
