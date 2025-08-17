@@ -400,13 +400,13 @@ class GameManager:
         return keys
 
     async def game_loop(self):
-        self.create_ai_player()
+        # self.create_ai_player()
         
         while self.running:
-            if self.ai_player_id:
-                ai_keys = self.simulate_ai_input()
-                if ai_keys:
-                    self.update_player_input(self.ai_player_id, ai_keys)
+            # if self.ai_player_id:
+            #     ai_keys = self.simulate_ai_input()
+            #     if ai_keys:
+            #         self.update_player_input(self.ai_player_id, ai_keys)
             
             await self.update_wind()
             await self.broadcast_game_state()

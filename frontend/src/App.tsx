@@ -450,16 +450,15 @@ function App() {
       />
 
       <div className="game-ui">
-        <h2>🤖 Automated Windsurf Simulator</h2>
-        <div>AI Players: {gameState.players.filter(p => p.name.includes('AI')).length}</div>
-        <div>Human Players: {gameState.players.filter(p => !p.name.includes('AI')).length}</div>
-        <div>Total Players: {gameState.players.length}</div>
+        <h2>🏄‍♂️ Windsurf Game - Single Player</h2>
+        <div>Players Connected: {gameState.players.length}</div>
+        <div>Status: {connected ? '🟢 Ready to Play' : '🔴 Connecting...'}</div>
       </div>
 
       <div className="real-time-matrix">
-        <div><strong>🤖 AI SIMULATOR DATA</strong></div>
+        <div><strong>🏄‍♂️ PLAYER DATA</strong></div>
         {gameState.players.map(player => (
-          <div key={player.id} style={{ marginBottom: '10px', padding: '5px', border: player.name.includes('AI') ? '2px solid #00ff00' : '1px solid #ccc' }}>
+          <div key={player.id} style={{ marginBottom: '10px', padding: '5px', border: '2px solid #4ecdc4' }}>
             <div><strong>{player.name}</strong></div>
             <div>Position: ({Math.round(player.position[0])}, {Math.round(player.position[2])})</div>
             <div>Speed: {Math.round(player.speed * 10) / 10} knots</div>
@@ -472,7 +471,7 @@ function App() {
         <div style={{ marginTop: '10px', borderTop: '1px solid #ccc', paddingTop: '5px' }}>
           <div>Wind Direction: {Math.round(gameState.windDirection)}°</div>
           <div>Wind Strength: {Math.round(gameState.windStrength * 10) / 10} knots</div>
-          <div>Manual Keys: {keysPressedDisplay.join(', ') || 'None'}</div>
+          <div>Active Keys: {keysPressedDisplay.join(', ') || 'None'}</div>
         </div>
       </div>
 
@@ -485,21 +484,20 @@ function App() {
       </div>
 
       <div className="controls">
-        <div><strong>🤖 Automated Simulator:</strong></div>
-        <div>✅ AI demonstrates weight shift physics</div>
-        <div>✅ AI shows foiling activation at speed</div>
-        <div>✅ AI exhibits crash recovery</div>
-        <div>✅ Dynamic wind conditions</div>
+        <div><strong>🎮 Game Controls:</strong></div>
+        <div><strong>Mouse:</strong> Sail angle (X) and power (Y)</div>
+        <div><strong>Keyboard Board:</strong> W/S/A/D (move), R/F (weight shift)</div>
+        <div><strong>Keyboard Sail:</strong> Q/E (trim), ←/→ (angle), Z/X (power)</div>
         <div style={{ marginTop: '10px', fontSize: '12px', color: '#888' }}>
-          Manual controls: W/S/A/D (board), Q/E (sail trim), ←/→ (sail angle), Z/X (sail power), R/F (weight)
+          Get to 5+ knots to activate foiling! Use weight shift to maintain stability.
         </div>
       </div>
 
       <div className="multiplayer-info">
-        <div>Status: {connected ? '🟢 Connected' : '🔴 Connecting...'}</div>
-        <div>Simulation: {connected ? '🤖 AI Running' : '⏸️ Paused'}</div>
+        <div>Connection: {connected ? '🟢 Connected' : '🔴 Connecting...'}</div>
+        <div>Game Mode: 🏄‍♂️ Single Player</div>
         <div>Player ID: {playerId.slice(0, 8)}</div>
-        <div className="game-info">Automated physics demonstration active</div>
+        <div className="game-info">Ready to windsurf!</div>
       </div>
     </div>
   )
