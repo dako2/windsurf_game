@@ -1,6 +1,4 @@
-import { useState, useEffect, useRef, Suspense } from 'react'
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Sky } from '@react-three/drei'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 interface Player {
@@ -33,6 +31,7 @@ function App() {
   const keysPressed = useRef<Set<string>>(new Set())
   const [keysPressedDisplay, setKeysPressedDisplay] = useState<string[]>([])
   const [sailAdjustment, setSailAdjustment] = useState(0)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const connectWebSocket = () => {
@@ -146,104 +145,141 @@ function App() {
     const adjustment = isCurrentPlayer ? sailAdjustment * 2.0 : 0
     const finalAngle = baseAngle + adjustment
     
-    console.log('Sail angle calculation:', { 
-      windDirection, 
-      playerRotation: playerRotation * 180 / Math.PI, 
-      baseAngle: baseAngle * 180 / Math.PI, 
-      adjustment: adjustment * 180 / Math.PI, 
-      finalAngle: finalAngle * 180 / Math.PI,
-      sailAdjustment 
-    })
-    
     return finalAngle
   }
 
+  const drawWindsurfer = (ctx: CanvasRenderingContext2D, x: number, y: number, rotation: number, isCurrentPlayer: boolean, foiling: boolean) => {
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(rotation)
+    
+    ctx.fillStyle = isCurrentPlayer ? "#ff6b6b" : "#4ecdc4"
+    if (foiling) {
+      ctx.shadowColor = "rgba(0,0,0,0.3)"
+      ctx.shadowBlur = 8
+      ctx.shadowOffsetY = 4
+    }
+    ctx.fillRect(-15, -3, 30, 6)
+    
+    const sailAngle = calculateSailAngle(gameState.windDirection, rotation * 180 / Math.PI, isCurrentPlayer)
+    ctx.save()
+    ctx.rotate(sailAngle)
+    ctx.fillStyle = "#ffffff"
+    ctx.strokeStyle = "#cccccc"
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, -20)
+    ctx.lineTo(-12, 15)
+    ctx.lineTo(12, 15)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
+    
+    ctx.strokeStyle = "#8B4513"
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(0, -20)
+    ctx.lineTo(0, 15)
+    ctx.stroke()
+    
+    ctx.fillStyle = "#ffeb3b"
+    ctx.beginPath()
+    ctx.arc(0, -8, 4, 0, 2 * Math.PI)
+    ctx.fill()
+    
+    if (foiling) {
+      ctx.fillStyle = "rgba(135, 206, 235, 0.6)"
+      ctx.beginPath()
+      ctx.arc(0, 0, 25, 0, 2 * Math.PI)
+      ctx.fill()
+    }
+    
+    ctx.restore()
+  }
+
+  const drawWaves = (ctx: CanvasRenderingContext2D, time: number) => {
+    const canvas = ctx.canvas
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"
+    ctx.lineWidth = 1
+    
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath()
+      for (let x = 0; x < canvas.width; x += 10) {
+        const waveHeight = Math.sin((x + time * 100 + i * 100) * 0.01) * 8
+        const y = canvas.height / 2 + waveHeight + i * 20
+        if (x === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+    }
+  }
+
+  const drawBuoys = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number) => {
+    const buoys = [
+      { x: centerX + 100, y: centerY + 100 },
+      { x: centerX - 150, y: centerY + 80 },
+      { x: centerX + 50, y: centerY - 120 }
+    ]
+    
+    ctx.fillStyle = "#ff9800"
+    buoys.forEach(buoy => {
+      ctx.beginPath()
+      ctx.arc(buoy.x, buoy.y, 8, 0, 2 * Math.PI)
+      ctx.fill()
+    })
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const animate = () => {
+      ctx.fillStyle = "#006994"
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      
+      drawWaves(ctx, Date.now())
+      
+      const centerX = canvas.width / 2
+      const centerY = canvas.height / 2
+      
+      drawBuoys(ctx, centerX, centerY)
+      
+      gameState.players.forEach(player => {
+        const screenX = centerX + player.position[0] * 10
+        const screenY = centerY + player.position[2] * 10
+        const rotation = player.rotation[1]
+        const isCurrentPlayer = player.id === playerId
+        const foiling = player.foiling || false
+        
+        drawWindsurfer(ctx, screenX, screenY, rotation, isCurrentPlayer, foiling)
+      })
+      
+      if (gameState.players.length === 0) {
+        drawWindsurfer(ctx, centerX, centerY, 0, true, false)
+      }
+      
+      requestAnimationFrame(animate)
+    }
+    
+    animate()
+  }, [gameState, playerId, sailAdjustment])
+
   return (
     <div className="game-container">
-      <Canvas camera={{ position: [0, 10, 10], fov: 75 }}>
-        <Suspense fallback={null}>
-          <Sky sunPosition={[100, 20, 100]} />
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-            <planeGeometry args={[1000, 1000]} />
-            <meshStandardMaterial color="#006994" transparent opacity={0.8} />
-          </mesh>
-          
-          {/* Always show current player's windsurfer at origin if no players in game state */}
-          {gameState.players.length === 0 && (
-            <group position={[0, 0.5, 0]} rotation={[0, 0, 0]}>
-              {/* Windsurfer board */}
-              <mesh>
-                <boxGeometry args={[2, 0.2, 0.5]} />
-                <meshStandardMaterial color="#ff6b6b" />
-              </mesh>
-              {/* Dynamic sail that rotates with wind and manual adjustment */}
-              <mesh 
-                position={[0, 1, 0]} 
-                rotation={[0, calculateSailAngle(gameState.windDirection, 0, true), 0]}
-              >
-                <planeGeometry args={[1.5, 2.5]} />
-                <meshStandardMaterial color="#ffffff" transparent opacity={0.9} side={2} />
-              </mesh>
-              {/* Mast */}
-              <mesh position={[0, 1, 0]}>
-                <cylinderGeometry args={[0.05, 0.05, 2]} />
-                <meshStandardMaterial color="#8B4513" />
-              </mesh>
-              {/* Player head */}
-              <mesh position={[0, 2, 0]}>
-                <sphereGeometry args={[0.3]} />
-                <meshStandardMaterial color="#ffeb3b" />
-              </mesh>
-            </group>
-          )}
-          
-          {gameState.players.map((player) => (
-            <group key={player.id} position={player.position} rotation={player.rotation}>
-              {/* Windsurfer board */}
-              <mesh>
-                <boxGeometry args={[2, 0.2, 0.5]} />
-                <meshStandardMaterial color={player.id === playerId ? "#ff6b6b" : "#4ecdc4"} />
-              </mesh>
-              {/* Dynamic sail that rotates with wind and player rotation */}
-              <mesh 
-                position={[0, 1, 0]} 
-                rotation={[0, calculateSailAngle(gameState.windDirection, player.rotation[1] * 180 / Math.PI, player.id === playerId), 0]}
-              >
-                <planeGeometry args={[1.5, 2.5]} />
-                <meshStandardMaterial color="#ffffff" transparent opacity={0.9} side={2} />
-              </mesh>
-              {/* Mast */}
-              <mesh position={[0, 1, 0]}>
-                <cylinderGeometry args={[0.05, 0.05, 2]} />
-                <meshStandardMaterial color="#8B4513" />
-              </mesh>
-              {/* Player head */}
-              <mesh position={[0, 2, 0]}>
-                <sphereGeometry args={[0.3]} />
-                <meshStandardMaterial color="#ffeb3b" />
-              </mesh>
-            </group>
-          ))}
-          
-          {/* Add some floating buoys for reference */}
-          <mesh position={[10, 1, 10]}>
-            <sphereGeometry args={[0.5]} />
-            <meshStandardMaterial color="#ff9800" />
-          </mesh>
-          <mesh position={[-15, 1, 8]}>
-            <sphereGeometry args={[0.5]} />
-            <meshStandardMaterial color="#ff9800" />
-          </mesh>
-          <mesh position={[5, 1, -12]}>
-            <sphereGeometry args={[0.5]} />
-            <meshStandardMaterial color="#ff9800" />
-          </mesh>
-          
-          <ambientLight intensity={0.5} />
-          <directionalLight position={[10, 10, 5]} intensity={1} />
-          <OrbitControls enablePan={true} enableZoom={true} enableRotate={true} />
-        </Suspense>
-      </Canvas>
+      <canvas 
+        ref={canvasRef}
+        width={800}
+        height={600}
+        style={{ 
+          border: '2px solid #333',
+          borderRadius: '8px',
+          background: 'linear-gradient(180deg, #87CEEB 0%, #006994 100%)'
+        }}
+      />
 
       <div className="game-ui">
         <h2>🤖 Automated Windsurf Simulator</h2>
