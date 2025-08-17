@@ -32,6 +32,8 @@ function App() {
   const keysPressed = useRef<Set<string>>(new Set())
   const [keysPressedDisplay, setKeysPressedDisplay] = useState<string[]>([])
   const [sailAdjustment, setSailAdjustment] = useState(0)
+  const [keyboardSailAngle, setKeyboardSailAngle] = useState(0)
+  const [keyboardSailPower, setKeyboardSailPower] = useState(0.5)
   const [mousePosition, setMousePosition] = useState({ x: 0.5, y: 0.5 })
   const [mousePressed, setMousePressed] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -96,6 +98,30 @@ function App() {
         setSailAdjustment(prev => {
           const newValue = Math.min(prev + 0.3, 2.0)
           console.log('E pressed - Sail adjustment:', newValue)
+          return newValue
+        })
+      } else if (event.key === 'ArrowLeft') {
+        setKeyboardSailAngle(prev => {
+          const newValue = Math.max(prev - 0.2, -2.0)
+          console.log('Left Arrow - Keyboard sail angle:', newValue)
+          return newValue
+        })
+      } else if (event.key === 'ArrowRight') {
+        setKeyboardSailAngle(prev => {
+          const newValue = Math.min(prev + 0.2, 2.0)
+          console.log('Right Arrow - Keyboard sail angle:', newValue)
+          return newValue
+        })
+      } else if (event.key.toLowerCase() === 'z') {
+        setKeyboardSailPower(prev => {
+          const newValue = Math.max(prev - 0.1, 0.1)
+          console.log('Z pressed - Keyboard sail power:', newValue)
+          return newValue
+        })
+      } else if (event.key.toLowerCase() === 'x') {
+        setKeyboardSailPower(prev => {
+          const newValue = Math.min(prev + 0.1, 1.0)
+          console.log('X pressed - Keyboard sail power:', newValue)
           return newValue
         })
       }
@@ -166,19 +192,26 @@ function App() {
       if (ws && connected) {
         const keys = Array.from(keysPressed.current)
         
-        const sailAngle = (mousePosition.x - 0.5) * 4.0 // -2 to +2 range
-        const sailPower = Math.max(0.1, 1.0 - mousePosition.y) // 0.1 to 1.0 range
+        const mouseSailAngle = (mousePosition.x - 0.5) * 4.0 // -2 to +2 range
+        const mouseSailPower = Math.max(0.1, 1.0 - mousePosition.y) // 0.1 to 1.0 range
         
-        if (keys.length > 0 || mousePressed || Math.abs(sailAngle) > 0.1) {
+        const finalSailAngle = mouseSailAngle + keyboardSailAngle
+        const finalSailPower = Math.max(0.1, Math.min(1.0, mouseSailPower + keyboardSailPower - 0.5))
+        
+        if (keys.length > 0 || mousePressed || Math.abs(finalSailAngle) > 0.1 || Math.abs(keyboardSailAngle) > 0.1 || Math.abs(keyboardSailPower - 0.5) > 0.1) {
           ws.send(JSON.stringify({
             type: 'input',
             playerId,
             keys,
             mouse: {
-              sailAngle,
-              sailPower,
+              sailAngle: finalSailAngle,
+              sailPower: finalSailPower,
               pressed: mousePressed,
               position: mousePosition
+            },
+            keyboard: {
+              sailAngle: keyboardSailAngle,
+              sailPower: keyboardSailPower
             }
           }))
         }
@@ -186,7 +219,7 @@ function App() {
     }, 50)
 
     return () => clearInterval(gameLoop)
-  }, [ws, connected, playerId, mousePosition, mousePressed])
+  }, [ws, connected, playerId, mousePosition, mousePressed, keyboardSailAngle, keyboardSailPower])
 
   // const playerData = gameState.players.find(p => p.id === playerId) // Unused in AI simulator mode
   const windArrow = `→`.repeat(Math.floor(gameState.windStrength / 5))
@@ -401,7 +434,7 @@ function App() {
     }
     
     animate()
-  }, [gameState, playerId, sailAdjustment])
+  }, [gameState, playerId, sailAdjustment, keyboardSailAngle, keyboardSailPower])
 
   return (
     <div className="game-container">
@@ -458,7 +491,7 @@ function App() {
         <div>✅ AI exhibits crash recovery</div>
         <div>✅ Dynamic wind conditions</div>
         <div style={{ marginTop: '10px', fontSize: '12px', color: '#888' }}>
-          Manual controls still available: W/S/A/D/Q/E/R/F
+          Manual controls: W/S/A/D (board), Q/E (sail trim), ←/→ (sail angle), Z/X (sail power), R/F (weight)
         </div>
       </div>
 
