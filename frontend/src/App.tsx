@@ -9,6 +9,8 @@ interface Player {
   rotation: [number, number, number]
   speed: number
   name: string
+  weightShift?: number
+  foiling?: boolean
 }
 
 interface GameState {
@@ -258,6 +260,8 @@ function App() {
         <div>Calculated Sail Angle: {Math.round(calculateSailAngle(gameState.windDirection, (playerData?.rotation[1] || 0) * 180 / Math.PI, true) * 180 / Math.PI)}°</div>
         <div>Wind Direction: {Math.round(gameState.windDirection)}°</div>
         <div>Wind Strength: {Math.round(gameState.windStrength * 10) / 10} knots</div>
+        <div>Weight Shift: {playerData?.weightShift ? Math.round(playerData.weightShift * 100) / 100 : 0}</div>
+        <div>Foiling: {playerData?.foiling ? '🦅 YES' : '🌊 NO'}</div>
         <div>Keys Pressed: {keysPressedDisplay.join(', ') || 'None'}</div>
       </div>
 
@@ -274,6 +278,7 @@ function App() {
         <div>W/S - Forward/Backward</div>
         <div>A/D - Turn Left/Right</div>
         <div>Q/E - Adjust Sail</div>
+        <div>R/F - Weight Forward/Back</div>
       </div>
 
       <div className="multiplayer-info">

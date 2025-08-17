@@ -26,6 +26,9 @@ class Player:
     rotation: Tuple[float, float, float]
     speed: float
     sail_angle: float
+    weight_shift: float
+    board_velocity: Tuple[float, float]
+    foiling: bool
     last_update: float
 
 @dataclass
@@ -35,6 +38,24 @@ class GameState:
     wind_strength: float
     waves: float
     timestamp: float
+
+def compute_sail_force(wind_speed: float, wind_dir: float, sail_angle: float) -> Tuple[float, float]:
+    relative_angle = wind_dir - sail_angle
+    fx = wind_speed * math.cos(math.radians(relative_angle))
+    fy = wind_speed * math.sin(math.radians(relative_angle))
+    return (fx, fy)
+
+def compute_water_drag(velocity: Tuple[float, float]) -> Tuple[float, float]:
+    drag_coeff = 0.8
+    return (-drag_coeff * velocity[0], -drag_coeff * velocity[1])
+
+def compute_foil_lift(velocity: Tuple[float, float]) -> float:
+    speed = math.sqrt(velocity[0]**2 + velocity[1]**2)
+    lift_coeff = 1.2
+    return lift_coeff * speed**2
+
+def vector_magnitude(velocity: Tuple[float, float]) -> float:
+    return math.sqrt(velocity[0]**2 + velocity[1]**2)
 
 class GameManager:
     def __init__(self):
@@ -65,6 +86,9 @@ class GameManager:
             rotation=(0.0, 0.0, 0.0),
             speed=0.0,
             sail_angle=0.0,
+            weight_shift=0.0,
+            board_velocity=(0.0, 0.0),
+            foiling=False,
             last_update=time.time()
         )
         self.game_state.players[player_id] = player
@@ -79,35 +103,84 @@ class GameManager:
         dt = current_time - player.last_update
         
         max_speed = 25.0
-        acceleration = 5.0
         turn_speed = 2.0
+        weight_shift_speed = 2.0
+        mass = 80.0
         
         x, y, z = player.position
         rx, ry, rz = player.rotation
         
-        if 'w' in keys:  # Forward
-            wind_factor = self.calculate_wind_effect(player.sail_angle, self.game_state.wind_direction, ry)
-            player.speed = min(max_speed, player.speed + acceleration * dt * wind_factor)
-        elif 's' in keys:  # Backward
-            player.speed = max(0, player.speed - acceleration * dt * 2)
+        if 'r' in keys:
+            player.weight_shift = max(-1.0, player.weight_shift - weight_shift_speed * dt)
+        elif 'f' in keys:
+            player.weight_shift = min(1.0, player.weight_shift + weight_shift_speed * dt)
         else:
-            player.speed = max(0, player.speed - acceleration * dt * 0.5)  # Natural deceleration
-            
-        if 'a' in keys:  # Turn left
+            if player.weight_shift > 0:
+                player.weight_shift = max(0, player.weight_shift - weight_shift_speed * dt * 0.5)
+            elif player.weight_shift < 0:
+                player.weight_shift = min(0, player.weight_shift + weight_shift_speed * dt * 0.5)
+        
+        if 'a' in keys:
             ry -= turn_speed * dt
-        if 'd' in keys:  # Turn right
+        if 'd' in keys:
             ry += turn_speed * dt
             
-        if 'q' in keys:  # Adjust sail left
+        if 'q' in keys:
             player.sail_angle = max(-45, player.sail_angle - 30 * dt)
-        if 'e' in keys:  # Adjust sail right
+        if 'e' in keys:
             player.sail_angle = min(45, player.sail_angle + 30 * dt)
-            
+        
+        sail_force = compute_sail_force(self.game_state.wind_strength, self.game_state.wind_direction, player.sail_angle)
+        drag_force = compute_water_drag(player.board_velocity)
+        
+        total_force = (sail_force[0] + drag_force[0], sail_force[1] + drag_force[1])
+        
+        if not player.foiling:
+            weight_factor = 1.0 + (player.weight_shift * -0.3)
+            total_force = (total_force[0] * weight_factor, total_force[1] * weight_factor)
+        
+        speed = vector_magnitude(player.board_velocity)
+        if speed > 5.0:
+            if not player.foiling:
+                player.foiling = True
+            lift = compute_foil_lift(player.board_velocity)
+            total_force = (total_force[0] * 1.2, total_force[1] * 1.2)
+        else:
+            player.foiling = False
+        
+        if player.foiling:
+            if abs(player.weight_shift) > 0.7:
+                player.foiling = False
+                player.board_velocity = (player.board_velocity[0] * 0.6, player.board_velocity[1] * 0.6)
+        
+        if 'w' in keys:
+            wind_factor = self.calculate_wind_effect(player.sail_angle, self.game_state.wind_direction, ry)
+            acc = (total_force[0] / mass * wind_factor, total_force[1] / mass * wind_factor)
+            player.board_velocity = (
+                player.board_velocity[0] + acc[0] * dt,
+                player.board_velocity[1] + acc[1] * dt
+            )
+        elif 's' in keys:
+            player.board_velocity = (
+                player.board_velocity[0] * (1 - 2 * dt),
+                player.board_velocity[1] * (1 - 2 * dt)
+            )
+        else:
+            player.board_velocity = (
+                player.board_velocity[0] * (1 - 0.5 * dt),
+                player.board_velocity[1] * (1 - 0.5 * dt)
+            )
+        
+        player.speed = min(max_speed, vector_magnitude(player.board_velocity))
+        
         if player.speed > 0:
             x += math.sin(ry) * player.speed * dt
             z += math.cos(ry) * player.speed * dt
             
-        wave_height = math.sin(current_time * 0.5 + x * 0.1) * 0.2
+        if player.foiling:
+            wave_height = math.sin(current_time * 0.5 + x * 0.1) * 0.2 + 0.5
+        else:
+            wave_height = math.sin(current_time * 0.5 + x * 0.1) * 0.2
         y = wave_height
         
         player.position = (x, y, z)
@@ -143,7 +216,9 @@ class GameManager:
                 "name": player.name,
                 "position": list(player.position),
                 "rotation": list(player.rotation),
-                "speed": player.speed
+                "speed": player.speed,
+                "weightShift": player.weight_shift,
+                "foiling": player.foiling
             })
             
         message = {
