@@ -14,6 +14,27 @@ def heading_to_unit(heading_deg: float) -> Tuple[float, float]:
     r = math.radians(heading_deg)
     return (math.cos(r), math.sin(r))
 
+def unit(vx, vy):
+    s = math.hypot(vx, vy)
+    return (0.0, 0.0) if s == 0 else (vx/s, vy/s)
+
+def signed_angle_deg(ax, ay, bx, by):
+    ang = math.degrees(math.atan2(ax*by - ay*bx, ax*bx + ay*by))
+    return ang
+
+def apparent_wind(world_wind_vec, boat_vel):
+    return (world_wind_vec[0] - boat_vel[0],
+            world_wind_vec[1] - boat_vel[1])
+
+def polar_max_ratio(rel_deg):
+    """
+    Max boat speed / true wind as a smooth 'polar'.
+    Peak ~2.5x on a beam reach (~90°), weaker upwind/downwind.
+    """
+    d = abs(((rel_deg + 180.0) % 360.0) - 180.0)  # 0..180
+    r = 0.8 + 1.9 * (math.sin(math.radians(d)) ** 1.4)  # ~0.8..2.7
+    return min(2.5, max(0.7, r))  # clamp ~[0.7, 2.5]
+
 app = FastAPI()
 
 # Disable CORS. Do not remove this for full-stack development.
@@ -219,6 +240,15 @@ class GameManager:
         wave_current = compute_wave_current(player.position, current_time, self.game_state.waves)
         current_force = (wave_current[0] * 0.5, wave_current[1] * 0.5)  # Scale current influence
         
+        wx, wz = heading_to_unit(self.game_state.wind_direction)
+        true_wind_vec = (wx * self.game_state.wind_strength, wz * self.game_state.wind_strength)
+        
+        hx, hz = heading_to_unit(ry)
+        
+        awx, awz = apparent_wind(true_wind_vec, player.board_velocity)
+        
+        rel_aw_deg = abs(signed_angle_deg(hx, hz, awx, awz))
+        
         total_force = (sail_force[0] + drag_force[0] + current_force[0], 
                       sail_force[1] + drag_force[1] + current_force[1])
         
@@ -254,6 +284,16 @@ class GameManager:
                 player.foiling = False
                 player.board_velocity = (player.board_velocity[0] * 0.75, player.board_velocity[1] * 0.75)
         
+        v_target = polar_max_ratio(rel_aw_deg) * self.game_state.wind_strength  # ~<= 2.5× wind
+        
+        speed_now = vector_magnitude(player.board_velocity)
+        speed_err = max(0.0, v_target - speed_now)
+        
+        kp = 18.0  # N per (speed unit); raise -> faster ramp, lower -> smoother
+        control_force = (hx * kp * speed_err, hz * kp * speed_err)
+        
+        total_force = (total_force[0] + control_force[0], total_force[1] + control_force[1])
+        
         if 'w' in keys:
             wind_factor = self.calculate_wind_effect(player.sail_angle, self.game_state.wind_direction, ry)
             acc = (total_force[0] / mass * wind_factor, total_force[1] / mass * wind_factor)
@@ -269,7 +309,8 @@ class GameManager:
         else:
             player.board_velocity = damp(player.board_velocity, rate=0.5, dt=dt)
         
-        player.board_velocity = clamp_speed(player.board_velocity, max_speed)
+        max_speed_scaled = 2.6 * self.game_state.wind_strength
+        player.board_velocity = clamp_speed(player.board_velocity, max_speed_scaled)
         player.speed = math.hypot(*player.board_velocity)
         
         effective_velocity = (
