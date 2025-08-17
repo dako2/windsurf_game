@@ -57,6 +57,40 @@ def compute_foil_lift(velocity: Tuple[float, float]) -> float:
 def vector_magnitude(velocity: Tuple[float, float]) -> float:
     return math.sqrt(velocity[0]**2 + velocity[1]**2)
 
+def compute_wave_current(position: Tuple[float, float, float], time: float, wave_strength: float) -> Tuple[float, float]:
+    """Compute water current effects from wave motion"""
+    x, y, z = position
+    
+    wave1_x = math.sin(time * 0.3 + x * 0.05) * wave_strength * 0.4
+    wave1_z = math.cos(time * 0.3 + z * 0.05) * wave_strength * 0.3
+    
+    wave2_x = math.sin(time * 0.2 + x * 0.08 + z * 0.03) * wave_strength * 0.3
+    wave2_z = math.cos(time * 0.2 + z * 0.08 + x * 0.03) * wave_strength * 0.2
+    
+    current_x = wave1_x + wave2_x
+    current_z = wave1_z + wave2_z
+    
+    return (current_x, current_z)
+
+def compute_enhanced_wave_height(position: Tuple[float, float, float], time: float, wave_strength: float, foiling: bool) -> float:
+    """Compute realistic wave height with multiple wave systems"""
+    x, y, z = position
+    
+    primary_wave = math.sin(time * 0.5 + x * 0.1) * wave_strength * 0.3
+    
+    cross_wave = math.sin(time * 0.3 + z * 0.08 + x * 0.02) * wave_strength * 0.2
+    
+    chop = math.sin(time * 1.2 + x * 0.15 + z * 0.12) * wave_strength * 0.1
+    
+    base_height = primary_wave + cross_wave + chop
+    
+    if foiling:
+        foil_height = 0.8 + base_height * 0.3  # Foils follow wave contours but elevated
+    else:
+        foil_height = base_height
+        
+    return foil_height
+
 class GameManager:
     def __init__(self):
         self.connections: Dict[str, WebSocket] = {}
@@ -136,7 +170,11 @@ class GameManager:
         sail_force = compute_sail_force(self.game_state.wind_strength, self.game_state.wind_direction, player.sail_angle)
         drag_force = compute_water_drag(player.board_velocity)
         
-        total_force = (sail_force[0] + drag_force[0], sail_force[1] + drag_force[1])
+        wave_current = compute_wave_current(player.position, current_time, self.game_state.waves)
+        current_force = (wave_current[0] * 0.5, wave_current[1] * 0.5)  # Scale current influence
+        
+        total_force = (sail_force[0] + drag_force[0] + current_force[0], 
+                      sail_force[1] + drag_force[1] + current_force[1])
         
         if not player.foiling:
             weight_factor = 1.0 + (player.weight_shift * -0.3)
@@ -146,8 +184,18 @@ class GameManager:
         if speed > 5.0:
             if not player.foiling:
                 player.foiling = True
+                print(f"Player {player.id} entering foiling mode at {speed:.1f} knots")
+            
             lift = compute_foil_lift(player.board_velocity)
-            total_force = (total_force[0] * 1.2, total_force[1] * 1.2)
+            
+            foil_efficiency = 1.4
+            wave_sensitivity = 1.2
+            
+            total_force = (total_force[0] * foil_efficiency, total_force[1] * foil_efficiency)
+            
+            enhanced_current = (wave_current[0] * wave_sensitivity, wave_current[1] * wave_sensitivity)
+            total_force = (total_force[0] + enhanced_current[0], total_force[1] + enhanced_current[1])
+            
         else:
             player.foiling = False
         
@@ -160,7 +208,8 @@ class GameManager:
             wind_factor = self.calculate_wind_effect(player.sail_angle, self.game_state.wind_direction, ry)
             acc = (total_force[0] / mass * wind_factor, total_force[1] / mass * wind_factor)
             if player.id == "ai_simulator":
-                print(f"AI: wind_factor={wind_factor:.2f}, speed={vector_magnitude(player.board_velocity):.2f}, foiling={player.foiling}, weight_shift={player.weight_shift:.2f}")
+                wave_curr = compute_wave_current(player.position, current_time, self.game_state.waves)
+                print(f"AI: wind_factor={wind_factor:.2f}, speed={vector_magnitude(player.board_velocity):.2f}, foiling={player.foiling}, weight_shift={player.weight_shift:.2f}, wave_current=({wave_curr[0]:.2f},{wave_curr[1]:.2f})")
             player.board_velocity = (
                 player.board_velocity[0] + acc[0] * dt,
                 player.board_velocity[1] + acc[1] * dt
@@ -178,14 +227,15 @@ class GameManager:
         
         player.speed = min(max_speed, vector_magnitude(player.board_velocity))
         
-        x += player.board_velocity[0] * dt
-        z += player.board_velocity[1] * dt
+        effective_velocity = (
+            player.board_velocity[0] + wave_current[0] * 0.1,  # Small direct current push
+            player.board_velocity[1] + wave_current[1] * 0.1
+        )
+        
+        x += effective_velocity[0] * dt
+        z += effective_velocity[1] * dt
             
-        if player.foiling:
-            wave_height = math.sin(current_time * 0.5 + x * 0.1) * 0.2 + 0.5
-        else:
-            wave_height = math.sin(current_time * 0.5 + x * 0.1) * 0.2
-        y = wave_height
+        y = compute_enhanced_wave_height(player.position, current_time, self.game_state.waves, player.foiling)
         
         player.position = (x, y, z)
         player.rotation = (rx, ry, rz)
@@ -204,9 +254,20 @@ class GameManager:
         
     async def update_wind(self):
         current_time = time.time()
-        self.game_state.wind_direction += math.sin(current_time * 0.1) * 0.5
-        self.game_state.wind_strength = 15 + math.sin(current_time * 0.05) * 5
-        self.game_state.waves = 2 + math.sin(current_time * 0.03) * 1
+        
+        base_wind_shift = math.sin(current_time * 0.1) * 0.8
+        gust_factor = math.sin(current_time * 0.15) * 0.3
+        self.game_state.wind_direction += base_wind_shift + gust_factor
+        
+        base_strength = 15 + math.sin(current_time * 0.05) * 5
+        gust_strength = math.sin(current_time * 0.2) * 3
+        self.game_state.wind_strength = max(5, base_strength + gust_strength)
+        
+        wind_wave_factor = (self.game_state.wind_strength - 10) * 0.1
+        wave_period = math.sin(current_time * 0.03) * 1.5
+        swell_component = math.sin(current_time * 0.008) * 0.8  # Long period swell
+        
+        self.game_state.waves = max(0.5, 2 + wind_wave_factor + wave_period + swell_component)
         self.game_state.timestamp = current_time
         
     async def broadcast_game_state(self):
