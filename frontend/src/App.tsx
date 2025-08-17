@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { OrbitControls, Sky } from '@react-three/drei'
 import './App.css'
 
 interface Player {
@@ -111,6 +113,33 @@ function App() {
 
   return (
     <div className="game-container">
+      <Canvas camera={{ position: [0, 10, 10], fov: 75 }}>
+        <Suspense fallback={null}>
+          <Sky sunPosition={[100, 20, 100]} />
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+            <planeGeometry args={[1000, 1000]} />
+            <meshStandardMaterial color="#006994" transparent opacity={0.8} />
+          </mesh>
+          
+          {gameState.players.map((player) => (
+            <group key={player.id} position={player.position} rotation={player.rotation}>
+              <mesh>
+                <boxGeometry args={[2, 0.2, 0.5]} />
+                <meshStandardMaterial color={player.id === playerId ? "#ff6b6b" : "#4ecdc4"} />
+              </mesh>
+              <mesh position={[0, 1, 0]}>
+                <planeGeometry args={[1, 2]} />
+                <meshStandardMaterial color="#ffffff" transparent opacity={0.8} />
+              </mesh>
+            </group>
+          ))}
+          
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[10, 10, 5]} intensity={1} />
+          <OrbitControls enablePan={true} enableZoom={true} enableRotate={true} />
+        </Suspense>
+      </Canvas>
+
       <div className="game-ui">
         <h2>3D Windsurfing Game</h2>
         <div>Speed: {playerData ? Math.round(playerData.speed) : 0} knots</div>
@@ -135,32 +164,7 @@ function App() {
       <div className="multiplayer-info">
         <div>Status: {connected ? '🟢 Connected' : '🔴 Connecting...'}</div>
         <div>Player ID: {playerId.slice(0, 8)}</div>
-      </div>
-
-      <div className="main-content">
-        <div className="game-title">🏄‍♂️ Windsurfing Game</div>
-        <div className="game-status">
-          Real-time multiplayer backend is running!
-        </div>
-        <div className="game-info">
-          3D graphics temporarily disabled due to Three.js compatibility issues
-        </div>
-        <div className="game-instructions">
-          Use WASD keys to control your windsurfer
-        </div>
-        
-        {gameState.players.length > 0 && (
-          <div className="active-players">
-            <h3>Active Players:</h3>
-            {gameState.players.map((player) => (
-              <div key={player.id} className={`player-card ${player.id === playerId ? 'current-player' : 'other-player'}`}>
-                <div>{player.name} {player.id === playerId ? '(You)' : ''}</div>
-                <div>Position: ({Math.round(player.position[0])}, {Math.round(player.position[2])})</div>
-                <div>Speed: {Math.round(player.speed)} knots</div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="game-info">3D graphics enabled with Three.js integration</div>
       </div>
     </div>
   )
